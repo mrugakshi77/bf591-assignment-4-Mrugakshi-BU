@@ -16,6 +16,8 @@ library(DESeq2)
 #' @example `verse_counts <- read_data('verse_counts.tsv')`
 
 read_data <- function(filename){
+  data <- read.delim(filename)
+  return (tibble(data))
 }
 
 
@@ -33,6 +35,8 @@ read_data <- function(filename){
 #' @example `filtered_counts <- filter_zero_var_genes(verse_counts)`
 
 filter_zero_var_genes <- function(verse_counts) {
+  nonzero_genes <- rowSums(verse_counts[-1])!=0
+  return (verse_counts[nonzero_genes, ])
 }
 
 
@@ -47,8 +51,8 @@ filter_zero_var_genes <- function(verse_counts) {
 #' output:`"Ad"`
 
 timepoint_from_sample <- function(x) {
+  return (substring(x, 2, 3))
 }
-
 
 #' Grab sample replicate number from sample name
 #'
@@ -61,6 +65,7 @@ timepoint_from_sample <- function(x) {
 #' output: `"1"`
 
 sample_replicate <- function(x) {
+  return (substring(x, 5))
 }
 
 
@@ -82,6 +87,14 @@ sample_replicate <- function(x) {
 #' @example `meta <- meta_info_from_labels(colnames(count_data)[colnames(count_data)!='gene'])`
 
 meta_info_from_labels <- function(sample_names) {
+  timepoints <- unlist(lapply(sample_names, timepoint_from_sample))
+  replicates <- unlist(lapply(sample_names, sample_replicate))
+  metadata <- tibble(
+    sample = sample_names, 
+    timepoint = timepoints, 
+    replicate = replicates
+  )
+  return (metadata)
 }
 
 
@@ -98,6 +111,10 @@ meta_info_from_labels <- function(sample_names) {
 #' @examples `get_library_size(count_data)`
 
 get_library_size <- function(count_data) {
+  temp <- count_data[colnames(count_data)!='gene'] %>%
+    summarise(across(everything(), ~ sum(.)))
+    
+  return(temp)
 }
 
 

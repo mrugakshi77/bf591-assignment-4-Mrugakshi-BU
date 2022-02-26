@@ -25,7 +25,7 @@ markdown environments when grading them.
 
 ```{r setup, include=FALSE, results='hide'}
 #Source your main
-
+source('main.R')
 ```
 
 ## 1.  Reading and filtering count data
@@ -40,15 +40,17 @@ to reduce the size of our dataset if memory issues are a constraint.
 ### 1a. import data
 ```{r}
 #Read in verse_counts.tsv and display the head of the resulting tibble
-
+verse_counts <- read_data('verse_counts.tsv')
 #Display the top 10 rows of verse counts
+knitr::kable(head(verse_counts))
 ```
 
 ### 1b. Apply filter_zero_var_genes()
 ```{r}
 #Filter out zero variance genes using the function you created in `main.R
-
+filtered_verse_counts <- filter_zero_var_genes(verse_counts)
 #display the head of the counts data from the zero variance filter function's output
+knitr::kable(head(filtered_verse_counts))
 ```
 
 ## 2. Constructing sample meta data from sample names
@@ -67,7 +69,8 @@ with all the relevant information.
 
 ```{r}
 #Create and display the sample meta data tibble
-
+metadata <- meta_info_from_labels(colnames(filtered_verse_counts[2:length(colnames(filtered_verse_counts))]))
+metadata
 ```
 
 ## 3. Normalization
@@ -102,8 +105,13 @@ the barplot or write the code in the RMarkdown at your discretion.
 
 ```{r}
 #Calculate the number of reads in each sample and plot as a barplot
-
+library_size <- get_library_size(filtered_verse_counts)
 #Make a barplot showing the number of millions of reads for each sample
+pivot_longer(library_size/10^6, everything(), names_to="Sample",values_to="# reads") %>%
+  mutate(Sample=factor(Sample,levels=colnames(library_sizes))) %>%
+  ggplot(aes(x=Sample,y=`# reads`,fill=Sample)) +
+  geom_col() 
+
 ```
 
 #### CPM calculation
