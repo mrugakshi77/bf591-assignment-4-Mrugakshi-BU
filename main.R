@@ -7,7 +7,7 @@ library(DESeq2)
 #'
 #' @param filename (str): the path to a specific file (ie 'file/path/to/file.tsv')
 #'
-#' @return tibble: a (g x 1+m) tibble with a 'gene' column followed by
+#' @return tibble: a (g x m) tibble with a 'gene' column followed by
 #' sample names as column names.
 #'
 #' @note Column 'gene' should be first and the only column to contain strings.
@@ -24,10 +24,10 @@ read_data <- function(filename){
 #' Filter out genes with zero variance
 #'
 #'
-#' @param verse_counts tibble: a (g x 1+m) tibble with a 'gene' column followed
+#' @param verse_counts tibble: a (g x m) tibble with a 'gene' column followed
 #' by m raw counts columns with sample names as column names.
 #'
-#' @return tibble: a (n x 1+m) tibble with a 'gene' column followed by m columns
+#' @return tibble: a (n x m) tibble with a 'gene' column followed by m columns
 #' of raw counts with genes that have zero variance across samples removed
 #'
 #' @note (g >= n)
@@ -101,7 +101,7 @@ meta_info_from_labels <- function(sample_names) {
 #' Calculate total read counts for each sample in a count data.
 #'
 #'
-#' @param count_data tibble: a (n x 1+m) tibble with a 'gene' column followed
+#' @param count_data tibble: a (n x m) tibble with a 'gene' column followed
 #' by m raw counts columns of read counts
 #'
 #' @return tibble or named vector of read totals from each sample. Vectors must
@@ -122,21 +122,26 @@ get_library_size <- function(count_data) {
 #' following formula:
 #'     count / (sample_library_size/10^6)
 #'
-#' @param count_data tibble: a (n x 1+m) tibble with a 'gene' column followed
+#' @param count_data tibble: a (n x m) tibble with a 'gene' column followed
 #' by m raw counts columns of read counts
 #'
-#' @param count_data tibble: a (n x 1+m) tibble with a 'gene' column followed
+#' @param count_data tibble: a (n x m) tibble with a 'gene' column followed
 #' by m columns of cpm normalized read counts
 #'
 #' @examples
 #' `normalize_by_cpm(count_data)`
 
 normalize_by_cpm <- function(count_data) {
+  gene <- count_data$gene
+  library_size <- get_library_size(count_data[c(-1)]) %>%
+    dplyr::slice(1) %>% unlist(., use.names=FALSE)
+  cpm <- as_tibble(t(apply(count_data[-1],1,function(x) x/library_size*10^6)))
+  return(cbind(gene,cpm))
 }
 
 #' Normalize raw count matrix using DESeq2
 #'
-#' @param count_data tibble: a (n x 1+m) tibble with a 'gene' column followed
+#' @param count_data tibble: a (n x m) tibble with a 'gene' column followed
 #' by m raw counts columns of read counts
 
 #' @param meta_data tibble: sample-level information tibble corresponding to the
@@ -148,6 +153,23 @@ normalize_by_cpm <- function(count_data) {
 #' @examples
 #' `deseq_normalize(count_data, meta_data)`
 deseq_normalize <- function(count_data, meta_data) {
+  count_mat <- as.matrix(count_data[-1])
+  row.names(count_mat) <- count_data$gene
+  
+  dds <- DESeqDataSetFromMatrix(
+    countData=count_mat,
+    colData=tibble(sample_name=colnames(count_data[-1])),
+    design=~1 # no formula is needed for normalization, ~1 produces a trivial design matrix
+  )
+  # compute normalization factors
+  dds <- estimateSizeFactors(dds)
+  
+  # extract the normalized counts
+  deseq_norm_counts <- as_tibble(counts(dds,normalized=TRUE)) %>%
+    mutate(gene=count_data$gene) %>%
+    relocate(gene)
+  
+  return(deseq_norm_counts)
 }
 
 
@@ -167,6 +189,17 @@ deseq_normalize <- function(count_data, meta_data) {
 #' `plot_pca(data, meta, "Raw Count PCA")`
 
 plot_pca <- function(data, meta, title="") {
+  pca <- prcomp(t(data))
+  plot_data <- meta
+  plot_data$PC1 <- pca$x[ , 1]
+  plot_data$PC2 <- pca$x[ , 2]
+  percent_var <- pca$sdev^2 / sum( pca$sdev^2 )
+  pca_plot <- ggplot(plot_data, aes(x=PC1, y=PC2, col=timepoint)) +
+    geom_point() +
+    xlab(paste0("PC1: ",round(percent_var[1] * 100),"% variance")) +
+    ylab(paste0("PC2: ",round(percent_var[2] * 100),"% variance")) +
+    ggtitle(title)
+  return(pca_plot)
 }
 
 
@@ -183,6 +216,17 @@ plot_pca <- function(data, meta, title="") {
 #' @example `plot_sample_distributions(data, scale_y_axis=TRUE, title='Raw Count Distributions')`
 
 plot_sample_distributions <- function(data, scale_y_axis=FALSE, title="") {
+  temp <- tidyr::pivot_longer(data, cols=colnames(data), names_to='sample', values_to='counts') %>%
+    mutate(sample=factor(sample,levels=colnames(data)))
+  
+  dist_plot <- ggplot(temp, aes(x=sample, y=counts, col=sample)) +
+    geom_boxplot() +
+    ggtitle(title)
+  
+  if (scale_y_axis) {
+    dist_plot <- dist_plot + ggplot2::scale_y_log10()
+  }
+  return(dist_plot)
 }
 
 
@@ -203,4 +247,18 @@ plot_sample_distributions <- function(data, scale_y_axis=FALSE, title="") {
 #' @example `plot_variance_vs_mean(data, scale_y_axis=TRUE, title='variance vs mean (raw counts)')`
 
 plot_variance_vs_mean <- function(data, scale_y_axis=FALSE, title="") {
+  means <- apply(data, 1, mean)
+  variances <- apply(data, 1, var)
+  plot_data <- tibble(mean=means, variance=variances)
+  plot_data$rank <- rank(plot_data$mean)
+  mv_plot <- ggplot(plot_data, aes(x=rank, y=variance)) +
+    geom_point(alpha=0.5) +
+    geom_smooth(method='gam', formula = y ~ s(x, bs = "cs")) +
+    xlab("Rank(Mean)") +
+    ylab("Variance") +
+    ggtitle(title)
+  if (scale_y_axis) {
+    mv_plot <- mv_plot + ggplot2::scale_y_log10()
+  }
+  return(mv_plot)
 }

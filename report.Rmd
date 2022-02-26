@@ -108,7 +108,7 @@ the barplot or write the code in the RMarkdown at your discretion.
 library_size <- get_library_size(filtered_verse_counts)
 #Make a barplot showing the number of millions of reads for each sample
 pivot_longer(library_size/10^6, everything(), names_to="Sample",values_to="# reads") %>%
-  mutate(Sample=factor(Sample,levels=colnames(library_sizes))) %>%
+  mutate(Sample=factor(Sample,levels=colnames(library_size))) %>%
   ggplot(aes(x=Sample,y=`# reads`,fill=Sample)) +
   geom_col() 
 
@@ -121,7 +121,8 @@ the provided formula.
 
 ```{r}
 #Normalize your filtered counts matrix with CPM and display the head
-
+cpm <- normalize_by_cpm(filtered_verse_counts)
+knitr::kable(head(cpm))
 ```
 
 ### 3b. Normalizing with DESeq2
@@ -143,7 +144,8 @@ may pass `~1` as the design formula to pass a trivial formula when creating the
 
 ```{r}
 #Normalize your filtered data and display the head of the resulting tibble
-
+deseq2 <- deseq_normalize(filtered_verse_counts, metadata)
+knitr::kable(head(deseq2))
 ```
 
 ## 4 Visualization
@@ -161,7 +163,7 @@ function is able to scale the y-axis to $log10$ values if specified by the
 
 ```{r}
 #Create and display your count distributions boxplot
-
+plot_sample_distributions(filtered_verse_counts[c(-1)], TRUE, "Count Distributions using log10(counts)")
 ```
 
 ### 4b. Count variance vs mean count
@@ -179,7 +181,7 @@ rank $1$.
 
 ```{r}
 #Create and display your variance vs mean plot
-
+plot_variance_vs_mean(filtered_verse_counts[c(-1)], TRUE, "Variance vs. mean count using log10(counts)")
 ```
 
 ### 4c. Visualizing patterns with PCA
@@ -195,7 +197,7 @@ where each dot represents a sample and is colored by its respective sample name.
 
 ```{r}
 #Create and display your PCA plot
-
+plot_pca(filtered_verse_counts[c(-1)], metadata, "PCA plot using log10(counts)")
 ```
 
 ### 5. Visualizing CPM
@@ -214,7 +216,9 @@ to `scale_y_axis` when calling functions that have that parameter.
 
 ```{r}
 #Create and display 3 plots of your cpm matrix: Sample Distribution, Variance vs Mean, and PCA
-
+plot_sample_distributions(cpm[c(-1)], TRUE, "CPM normalized Count Distributions using log10(counts)")
+plot_variance_vs_mean(cpm[c(-1)], TRUE, "CPM - Variance vs. mean count using log10(counts)")
+plot_pca(cpm[c(-1)], metadata, "CPM PCA plot using log10(counts)")
 ```
 
 ### 6. Visualizing DESeq2 Normalizion
@@ -232,5 +236,7 @@ display your Sample Distribution, Variance vs Mean, and PCA plots.
 
 ```{r}
 #Create and display 3 plots of your deseq-normalized data: Sample Distribution, Variance vs Mean, and PCA
-
+plot_sample_distributions(deseq2[c(-1)], TRUE, "Deseq2 normalized Count Distributions using log10(counts)")
+plot_variance_vs_mean(deseq2[c(-1)], TRUE, "Deseq2 - Variance vs. mean count using log10(counts)")
+plot_pca(deseq2[c(-1)], metadata, "Deseq2 PCA plot using log10(counts)")
 ```
